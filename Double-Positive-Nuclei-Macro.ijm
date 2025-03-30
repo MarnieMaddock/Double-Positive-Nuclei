@@ -16,8 +16,6 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTH
 WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * Instructions
  *  Use for .tif images
- *  Ensure that your Nuclei channel is first (C1)
- *  Ensure colocalisation channel of interest in the 2nd channel (C2)
  *  Images that have no cells (all black for example, will have the error: No window with "Results" found. Remove this black image from the dataset.
 	Press run
 	
