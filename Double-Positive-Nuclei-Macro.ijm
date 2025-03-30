@@ -46,6 +46,66 @@ Dialog.show();
 C1_name = Dialog.getString();
 C2_name = Dialog.getString();
 
+// Prompt user to specify channel order
+Dialog.create("Specify Channel Numbers");
+Dialog.addNumber("Channel number for " + C1_name, 1);
+Dialog.addNumber("Channel number for " + C2_name, 2);
+Dialog.addCheckbox("Transmitted light channel present?", true);
+Dialog.addNumber("Channel number for transmitted light", 3);
+Dialog.addCheckbox("Keep transmitted light channel open?", false);
+Dialog.show();
+
+// Get the channel numbers
+C1_num = Dialog.getNumber();
+C2_num = Dialog.getNumber();
+hasTrans = Dialog.getCheckbox();
+TL_num = Dialog.getNumber();
+keep_transmitted = Dialog.getCheckbox();
+
+// Preprocessing settings
+Dialog.create("Select Pre-processing Options");
+Dialog.addCheckbox("Median Filter", true);
+Dialog.addNumber("Median Filter Radius. Ignore option if N/A", 3);
+Dialog.addCheckbox("Unsharp Mask", false);
+Dialog.addNumber("Unsharp Mask Radius. Ignore option if N/A", 1);
+Dialog.addNumber("Unsharp Mask Weight. Ignore option if N/A", 0.6);
+Dialog.addCheckbox("Watershed", true);
+Dialog.show();
+
+// Save options
+median_filter = Dialog.getCheckbox();
+median_filter_radius = Dialog.getNumber();
+unsharp_mask = Dialog.getCheckbox();
+unsharp_radius = Dialog.getNumber();
+unsharp_weight = Dialog.getNumber();
+watershed = Dialog.getCheckbox();
+
+// Threshold settings
+Dialog.create("Adaptive Threshold Settings");
+Dialog.addNumber("Block size", 341);
+Dialog.addNumber("Then Subtract", -49);
+Dialog.show();
+
+// Save options
+block_num = Dialog.getNumber();
+subtract_num = Dialog.getNumber();
+
+// Analyze Particles Options
+Dialog.create("Analyze Particles Settings");
+Dialog.addNumber("Minimum Particle Size:", 0);
+Dialog.addNumber("Minimum Circularity:", 0.00);
+Dialog.addNumber("Maximum Circularity:", 1.00);
+Dialog.show();
+
+// Retrieve the values
+min_size = Dialog.getNumber();
+min_circularity = Dialog.getNumber();
+max_circularity = Dialog.getNumber();
+
+// Build the options string using the numbers supplied
+ap_options = "size=" + min_size + "-Infinity circularity=" + min_circularity + "-" + max_circularity + " show=Overlay display exclude clear summarize overlay add";
+
+
 // Start Batch Processing of .tif files
 processFolder(dir1);
 function processFolder(dir1) {
@@ -77,38 +137,58 @@ function processFile(dir1, resultsDir, file){
 			// Split the channels
 			run("Split Channels");
 			
-			// Check if C4 exists and close it if it does
-			if (isOpen("C4-" + title)) {
-				close("C4-" + title);
+			// Loop through channels 1 to 5
+			for (i = 1; i <= 5; i++) {
+			    keep = false;
+			    // Check if this channel is one of the ones the user wants to keep
+			    if (i == C1_num) {
+			        keep = true;
+			    }
+			    if (i == C2_num) {
+			        keep = true;
+			    }
+			    if (hasTrans && keep_transmitted && i == TL_num) {
+			        keep = true;
+			    }
+			    // If this channel is not selected, close it if open
+			    if (!keep) {
+			        winName = "C" + i + "-" + title;
+			        if (isOpen(winName)) {
+			            close(winName);
+			        }
+			    }
 			}
-			// Check if C3 exists and close it if it does
-			if (isOpen("C3-" + title)) {
-				close("C3-" + title);
-			}
-			
-			// Check if C5 exists and close it if it does
-			if (isOpen("C5-" + title)) {
-			    close("C5-" + title);
-			}
-			// Select C2 channel (e.g. SOX10)
-			selectWindow("C2-" + title);
-			
-			// Pre-processing of image
-			run("Median...", "radius=3"); // Run median filter to remove speckles
-			run("adaptiveThr ", "using=Mean from=341 then=-49"); // Threshold image using adaptive thresholding. The numbers specified can be optimised for your own image by going to Plugins --> Adaptive Thresholding
-			run("Watershed"); // Watershed segments cells close together
-			
-			// Select C1_name channel (C1)
-			selectWindow("C1-" + title);
-			
-			// Pre-processing of image
-			run("Median...", "radius=3"); // Run median filter to remove speckles
-			run("adaptiveThr ", "using=Mean from=341 then=-49"); // Threshold image using adaptive thresholding. The numbers specified can be optimised for your own image by going to Plugins --> Adaptive Thresholding
-			run("Watershed"); // Watershed segments cells close together
 
-			// Count number of C1_name +ve cells using analyze particles
-			run("Analyze Particles...", "  show=Overlay display exclude clear summarize overlay add");
+			// Create an array of channels you want to pre-process (for example, C1 and C2)
+			channelsToProcess = newArray(C1_num, C2_num);
 			
+						
+			for (i = 0; i < channelsToProcess.length; i++) {
+			    channel = channelsToProcess[i];
+			    // Select the current channel's window, e.g., "C1-<title>" or "C2-<title>"
+			    selectWindow("C" + channel + "-" + title);
+			    
+				// Pre-processing of image
+				if (median_filter) {
+	    			run("Median...", "radius=" + median_filter_radius);
+				}
+				
+				if (unsharp_mask) {
+					run("Unsharp Mask...", "radius=" + unsharp_radius + " mask=" + unsharp_weight);
+				}
+	
+				run("adaptiveThr ", "using=Mean from=" + block_num + " then=" + subtract_num); // Threshold image using adaptive thresholding. The numbers specified can be optimised for your own image by going to Plugins --> Adaptive Thresholding
+				if (watershed) {
+	    			run("Watershed");
+				} // Watershed segments cells close together
+			}
+			wait(3000);
+			
+			// ===== Nuclei Positive Cell Analysis =====
+			// Select the nuclei channel
+			selectWindow("C" + C1_num + "-" + title);
+			run("Analyze Particles...", ap_options);
+
 			// If the image is not black, a results window will appear with Nuclei counts
 			    if (isOpen("Results")) {
 			        selectWindow("Results");
@@ -136,14 +216,14 @@ function processFile(dir1, resultsDir, file){
 			wait(500); // Ensure enough time for computer to save file
 
 			// Co-localisation using Image Calculator
-			imageCalculator("AND create", "C1-" + title,"C2-" + title); // This creates a new image containing only the overlapping regions of the two channels
+			imageCalculator("AND create", "C" + C1_num + "-" + title,"C" + C2_num + "-" + title); // This creates a new image containing only the overlapping regions of the two channels
 			
 			// Check if the resulting image from the AND operation exists
-			if (isOpen("Result of C1-" + title)) {
-				selectWindow("Result of C1-" + title);
+			if (isOpen("Result of C" + C1_num + "-" + title)) {
+				wait(500);
+				selectWindow("Result of C" + C1_num + "-" + title);
 				 // Run Analyze Particles on the resulting image to count how many cells are co-localised
-				run("Analyze Particles...", "  show=Overlay display exclude clear summarize overlay add");
-
+				run("Analyze Particles...", ap_options);
 				wait(1000);  // Ensure enough time for computer to compute image calculator
 				
 				selectWindow("Summary");
@@ -163,13 +243,13 @@ function processFile(dir1, resultsDir, file){
 				wait(500); // Give time to save results
 			
 				// Save region of interest images specifying what cells got counted
-				selectWindow("Result of C1-" + title);
+				selectWindow("Result of C" + C1_num + "-" + title);
 				saveAs("Tiff", resultsDir2 + File.separator + "Coloc_image_" + title + ".tif");
 				close();
 				close("Coloc_image_" + title + ".tif");
 			}
 		// Save region of interest images specifying what cells got counted
-		selectWindow("C1-" + title);
+		selectWindow("C" + C1_num + "-" + title);
 		saveAs("Tiff", resultsDir2 + C1_name + "_" + title + ".tif");
 		
 		// Close remaining images
